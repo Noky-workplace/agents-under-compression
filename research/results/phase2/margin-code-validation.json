@@ -1,0 +1,47 @@
+{
+  "kind": "offline implementation validation; not GPU measurements",
+  "baseline_tasks": 114,
+  "q8_success_population": 95,
+  "q3_failures_among_q8_successes": 11,
+  "q4_failures_among_q8_successes": 4,
+  "focused_tests": {
+    "command": "uv run pytest -q tests/test_margin.py",
+    "passed": 18,
+    "failed": 0,
+    "seconds": 7.08
+  },
+  "thermal_abort_tests": {
+    "simulated_celsius": 85,
+    "telemetry_unavailable": true,
+    "partial_never_promoted": true
+  },
+  "gpu_measurement": "not run; ASUS owner only",
+  "owner_command": "bash scripts/phase2/gpu_margin.sh",
+  "owner_duration_minutes": {
+    "planning_estimate": 15,
+    "measured": false
+  },
+  "checks": {
+    "ruff": "uv run ruff check .: passed",
+    "shell": "bash -n scripts/phase2/gpu_margin.sh: passed",
+    "diff": "git diff --check: passed"
+  },
+  "skipped_modules": {
+    "tests/test_vol_panel.py": "numpy is unavailable; pytest.importorskip",
+    "tests/test_vol_band.py": "numpy is unavailable; pytest.importorskip",
+    "tests/test_vol_timing.py": "numpy is unavailable; pytest.importorskip"
+  },
+  "sandbox_diagnostic": {
+    "command": "ps -Ao pid,etime,command | rg 'pytest|margin|research.arena.mcp'",
+    "error": "zsh:1: operation not permitted: ps",
+    "impact": "optional process diagnostic unavailable; tests continued"
+  },
+  "full_suite": {
+    "command": "uv run pytest",
+    "passed": 327,
+    "skipped": 3,
+    "failed": 0,
+    "seconds": 486.46,
+    "collection_note": "Collected before five later margin regressions; final focused run covers all 18 margin tests and final implementation."
+  }
+}

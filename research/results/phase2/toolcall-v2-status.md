@@ -1,0 +1,9 @@
+- 2026-11-12T18:34:00Z  **preflight**  114 tasks; 0 MiB, 45
+- 2026-11-12T18:38:57Z  **Q3_K_M-nothink**  ok (ctx 8192)
+- 2026-11-12T18:44:48Z  **Q4_K_M-nothink**  ok (ctx 8192)
+- 2026-11-12T18:51:25Z  **Q5_K_M-nothink**  ok (ctx 8192)
+- 2026-11-12T18:58:45Z  **Q6_K-nothink**  ok (ctx 8192)
+- 2026-11-12T19:10:58Z  **Q8_0-nothink**  ok (ctx 4096)
+- 2026-11-12T19:50:16Z  **Q4_K_M-think**  ok (ctx 8192)
+- 2026-11-12T20:46:27Z  **Q6_K-think**  ok (ctx 8192)
+- 2026-11-12T20:46:36Z  **done**  finished

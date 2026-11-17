@@ -1,0 +1,9 @@
+{
+  "kind": "scripted_fake_model_validation_not_gpu_measurements",
+  "legacy_reference": "6fac8ad04483211b0cb12db03dfa92f19d5e30a0",
+  "tasks_file": "inference/toolcall/tasks/finance_v1_wait.jsonl",
+  "tasks": 114,
+  "legacy_json_identical": 114,
+  "ideal_executed_success": 114,
+  "latency_note": "Fake model returns fixed 0.25 seconds; no runtime inference measurement."
+}

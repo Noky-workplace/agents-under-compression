@@ -1,0 +1,28 @@
+{
+  "task_id": "toolcall-v2",
+  "task_id_note": "Title-derived; .agent-task.md has no explicit id",
+  "suite": "finance_v1.jsonl",
+  "tasks": 114,
+  "multi_turn_tasks": 40,
+  "chain_calls": {
+    "1": 9,
+    "2": 21,
+    "3": 10
+  },
+  "pytest": {
+    "command": "uv run pytest",
+    "passed": 163,
+    "failed": 0,
+    "duration_seconds": 6.12
+  },
+  "ruff": {
+    "command": "uv run ruff check .",
+    "exit_code": 0
+  },
+  "v0_unchanged": true,
+  "missing_evidence": [
+    "docs/phase2-results.md",
+    "research/results/phase2/toolcall.jsonl"
+  ],
+  "historical_tasks_audited_from_responses": 0
+}

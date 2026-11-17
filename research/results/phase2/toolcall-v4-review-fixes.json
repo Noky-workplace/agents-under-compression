@@ -1,0 +1,40 @@
+{
+  "task": "019a-enforcement-review-fixes",
+  "environment": "Mac scripted/local stubs; no inference measurements",
+  "focused_verification": {
+    "command": "uv run pytest tests/test_toolcall_enforcement.py -q",
+    "passed": 52,
+    "seconds": 6.9,
+    "failed": 0
+  },
+  "controls": {
+    "matched_no_rejection_cases": 9,
+    "schema_property_name_collisions": 5,
+    "thermal_and_telemetry_abort_cases": 2
+  },
+  "checks": {
+    "uv run ruff check .": "passed",
+    "bash -n scripts/phase2/gpu_toolcall_v4.sh": "passed",
+    "git diff --check": "passed"
+  },
+  "gpu_measurements": null,
+  "full_verification": {
+    "command": "uv run pytest",
+    "passed": 310,
+    "skipped": 3,
+    "failed": 0,
+    "seconds": 485.47,
+    "note": "Collected before four final malformed-call/first-reply regression cases were added; all four are included in the final 52-test focused run."
+  },
+  "final_analysis_verification": {
+    "command": "uv run pytest tests/test_toolcall_enforcement.py -q -k 'analysis or comparison'",
+    "passed": 2,
+    "deselected": 50,
+    "seconds": 0.04
+  },
+  "skipped_modules": {
+    "tests/test_vol_panel.py": "numpy unavailable",
+    "tests/test_vol_band.py": "numpy unavailable",
+    "tests/test_vol_timing.py": "numpy unavailable"
+  }
+}

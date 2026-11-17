@@ -1,0 +1,9 @@
+- 2026-11-16T17:16:56Z  **preflight**  114 tasks; 0 MiB, 41
+- 2026-11-16T17:22:02Z  **Q3_K_M-nothink-enforce**  ok (ctx 8192)
+- 2026-11-16T17:27:47Z  **Q4_K_M-nothink-enforce**  ok (ctx 8192)
+- 2026-11-16T17:34:42Z  **Q5_K_M-nothink-enforce**  ok (ctx 8192)
+- 2026-11-16T17:41:57Z  **Q6_K-nothink-enforce**  ok (ctx 8192)
+- 2026-11-16T17:55:15Z  **Q8_0-nothink-enforce**  ok (ctx 4096)
+- 2026-11-16T18:39:11Z  **Q4_K_M-think-enforce**  ok (ctx 8192)
+- 2026-11-16T18:49:02Z  **Q4_K_M-nothink-prov**  ok (ctx 8192)
+- 2026-11-16T18:49:11Z  **done**  finished
