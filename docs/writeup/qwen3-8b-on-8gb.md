@@ -7,6 +7,7 @@
 - The dominant failure on chained tasks is the same at every precision: the model sends a dependent call before the result it depends on exists, and fills the gap with a guessed value.
 - One prompt instruction removes that batching with thinking off (9–14 of 31 cases to 0) and lifts chained-task success from 0.47–0.62 to 0.78–0.88.
 - Enforcing the same thing in the harness adds nothing when thinking is off, recovers the gap when thinking is on, and breaks legitimately parallel calls. A strict "where did this value come from" check was unusable.
+- A pre-registered test of whether Q8's confidence predicts which tasks break at Q3 came out **not supported** (AUC 0.60, p = 0.15, 11 failures). The same confidence measure did flag Q8's own failures (AUC 0.62, p = 0.045), a lead we have not yet confirmed.
 
 ## What we tested
 
@@ -143,6 +144,30 @@ Three things follow.
 
 The rule that is actually wanted is narrower: block a call only when one of its arguments depends on a result that does not exist yet. A harness cannot know that in general, which is why this remains open.
 
+## Can you see in advance which tasks will break?
+
+Compression adds small errors to the score of every candidate token. A decision should flip only when that error exceeds the gap between the model's first and second choice. So tasks that the Q8 model decides by a small gap should be the ones that break at Q3. We wrote this down with its test and a stop rule before recording any probability: [pre-registration](../prereg/margin-v1.md), committed 16 Nov 2026.
+
+**Design.** Replay all 114 tasks on Q8, thinking off, temperature 0, recording the top-10 log-probabilities at every generated position. A position's margin is the log-probability of the chosen token minus that of the best alternative; a task's margin is the minimum over every position of every reply. Population: tasks Q8 solves. Positives: those Q3 fails in the earlier run. Test: AUC of the negative margin, one-sided permutation test with 10,000 permutations. Supported only if AUC > 0.5 and p < 0.05.
+
+**Result: not supported.** Of 95 tasks Q8 solves, 11 fail at Q3. AUC 0.600, p = 0.154. The replay reproduced the earlier Q8 tool calls exactly (mismatch share 0.0), so the probabilities belong to the same trajectories the outcomes came from. Our stated expectation was an AUC of 0.60–0.70 with 15–20 positives; the AUC landed in range but there were only 11 positives, too few for a gap of this size to stand out from chance. Source: [margin analysis](../../research/results/phase2/margin-analysis.md), [validation](../../research/results/phase2/margin-q8.validation.json), [per-position data](../../research/results/phase2/margin-q8.jsonl).
+
+| Secondary analysis (not used for the decision) | Tasks | Positives | AUC | One-sided p |
+|---|---:|---:|---:|---:|
+| Q8 margin vs Q8's **own** failures | 114 | 19 | 0.622 | 0.045 |
+| Q3 failure, mean instead of minimum margin | 95 | 11 | 0.623 | 0.097 |
+| Q3 failure, first generated position only | 95 | 11 | 0.453 | 0.69 |
+| Q4 failure (too few to judge) | 95 | 4 | 0.588 | 0.29 |
+
+Source: [the same analysis](../../research/results/phase2/margin-analysis.md). Mean task-minimum margin was 5.15 among Q8 successes and 1.44 among Q8 failures.
+
+The interesting line is the first: tasks the model decides narrowly are the ones it gets wrong at its own precision. That is a run-time signal an agent harness could use: ask for confirmation when the smallest gap in a reply is small. It is one of several secondary tests, unadjusted, so we treat it as a hypothesis for a new task set with its own registration, not as a finding. The first-position row says the call-or-not decision itself carries no signal here.
+
+Two measurement details mattered and are recorded in an [addendum written before the measured run](../prereg/margin-v1-addendum.md):
+
+- With `--reasoning-budget 0`, the llama.cpp server we used does not stop the model from thinking; it forces `</think>` straight after `<think>`. The model gave that forced token a log-probability of -24.9. Counted as a decision, it would set almost every task's minimum margin to about -25. Those positions are kept in the data and excluded from margins.
+- The server reports the end-of-turn token with empty text, so coverage checks have to identify it by token id. One measured attempt stopped at the first parallel-call task on a whitespace comparison bug; its partial file was kept, not analysed, and the run restarted from task 1.
+
 ## Related work
 
 The failure itself is known. Practitioner write-ups describe models that send dependent calls in parallel with invented or placeholder values. [NESTFUL](https://arxiv.org/abs/2409.03797) benchmarks nested call sequences, where one call's output feeds the next, and reports low full-sequence accuracy even for the best model tested.
@@ -163,6 +188,7 @@ On a prepared GPU host, follow `scripts/phase2/01_build_llamacpp.sh`, `02_fetch_
 bash scripts/phase2/gpu_toolcall_v2.sh
 bash scripts/phase2/gpu_toolcall_v3.sh
 bash scripts/phase2/gpu_toolcall_v4.sh
+bash scripts/phase2/gpu_margin.sh   # one run; refuses to start if an earlier run left files
 ```
 
 Those GPU scripts start a local `llama-server`, stop it afterwards and try to commit and push results; read them and adjust paths before running them on your own machine. To regenerate the paired analysis offline from checked-in data:
@@ -170,10 +196,11 @@ Those GPU scripts start a local `llama-server`, stop it afterwards and try to co
 ```bash
 uv run python -m inference.toolcall.compare_runs
 uv run python -m inference.toolcall.compare_runs --v4
+uv run python -m inference.toolcall.margin
 uv run pytest
 uv run ruff check .
 ```
 
 The useful result is a concrete execution rule: obtain a tool result before using it as an argument. Measure that behaviour directly before spending memory on more precision.
 
-Next: a much larger set of chained tasks, more model families, and whether fixes that read or steer the model's internal state still work on quantized weights.
+Next: test the confidence signal on a new task set, a much larger set of chained tasks, more model families, and whether fixes that read or steer the model's internal state still work on quantized weights.

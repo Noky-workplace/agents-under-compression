@@ -312,3 +312,82 @@ def test_measure_does_not_write_mismatched_turn(tmp_path, monkeypatch):
     assert output.with_suffix('.partial.jsonl').read_text() == ''
     assert not output.exists()
     assert not output.with_suffix('.validation.json').exists()
+
+
+def _pos(token, logprob, alt, alt_logprob, id_=None, raw=None):
+    pos = {'token': token, 'logprob': logprob, 'bytes': list((token if raw is None else raw).encode()),
+           'top_logprobs': [{'token': token, 'logprob': logprob}, {'token': alt, 'logprob': alt_logprob}]}
+    if id_ is not None:
+        pos['id'] = id_
+    return pos
+
+
+def test_installed_server_format_chat_forced_think_and_empty_end_of_turn():
+    # Shape recorded by the 18 Nov ASUS probe: forced </think> and <|im_end|> with empty text.
+    call = '<tool_call>\n{"name": "x", "arguments": {"a": 1}}\n</tool_call>'
+    items = [_pos('<think>', 0.0, '<tool_call>', -21.0, 151667),
+             _pos('</think>', -24.9, '\n', -1e-5, 151668),
+             _pos('\n\n', -1e-3, '\n', -7.0, 271),
+             _pos(call, -.01, 'y', -5.0),
+             _pos('', -2e-7, '</think>', -15.0, 151645)]
+    response = {'usage': {'completion_tokens': 5}, 'choices': [{
+        'logprobs': {'content': items},
+        'message': {'content': '', 'tool_calls': margin.raw_message(call)['tool_calls']}}]}
+    tokens = margin.positions(response)
+    assert margin.mark_forced_reasoning(tokens) == 2
+    margin.validate_coverage(response, tokens)
+    margins = margin.token_margins(tokens)
+    assert len(margins) == 3 and min(margins) > 0
+
+
+def test_empty_text_needs_end_of_turn_id():
+    call = '<tool_call>{"name":"x","arguments":{}}</tool_call>'
+    tokens = [_pos(call, -.01, 'y', -5.0), _pos('', -1e-7, 'z', -9.0)]
+    response = {'tokens_predicted': 2, 'content': call}
+    with pytest.raises(ValueError, match='end-of-turn'):
+        margin.validate_coverage(response, tokens, raw=True)
+    tokens[1]['id'] = 151645
+    margin.validate_coverage(response, tokens, raw=True)
+
+
+def test_unclosed_forced_reasoning_is_rejected():
+    with pytest.raises(ValueError, match='not closed'):
+        margin.mark_forced_reasoning([_pos('<think>', 0.0, 'a', -3.0)])
+
+
+def test_measure_records_failing_turn_without_probabilities(tmp_path, monkeypatch):
+    task = {'id': 't', 'category': 'single', 'messages': [], 'tools': [], 'expected': []}
+    baseline = [{'task': 't', 'label': 'Q8_0-nothink-wait',
+                 'responses': [{'choices': [{'message': {'tool_calls': []}}]}]}]
+    monkeypatch.setattr(margin, 'load_tasks', lambda _: [task])
+    monkeypatch.setattr(margin, 'load', lambda _: baseline)
+    calls = []
+
+    def generate(base, task, messages, mode):
+        calls.append(mode)
+        if len(calls) == 1:
+            return {'content': '', 'tool_calls': [{'function': {'name': 'x', 'arguments': '{}'}}]}, []
+        raise ValueError('Chat probabilities do not match response content')
+
+    monkeypatch.setattr(margin, 'generate', generate)
+    output = tmp_path / 'out.jsonl'
+    with pytest.raises(ValueError):
+        margin.measure('unused', output)
+    error = json.loads(output.with_suffix('.error.json').read_text())
+    assert error == {'task': 't', 'turn': 0, 'category': 'single',
+                     'error': 'ValueError: Chat probabilities do not match response content'}
+
+
+def test_chat_parallel_calls_with_newline_between_blocks():
+    # finance-037 (first parallel task) stopped the 17 Nov run: '\n' between calls vs content ''.
+    a = '<tool_call>\n{"name": "a", "arguments": {"x": 1}}\n</tool_call>'
+    b = '<tool_call>\n{"name": "b", "arguments": {"y": 2}}\n</tool_call>'
+    items = [_pos(a, -.01, 'z', -5.0), _pos('\n', -.01, 'z', -6.0), _pos(b, -.01, 'z', -5.0),
+             _pos('', -1e-7, 'z', -9.0, 151645)]
+    message = {'content': '', 'tool_calls': margin.raw_message(a + '\n' + b)['tool_calls']}
+    response = {'usage': {'completion_tokens': 4},
+                'choices': [{'logprobs': {'content': items}, 'message': message}]}
+    margin.validate_coverage(response, margin.positions(response))
+    message['content'] = 'unrelated'
+    with pytest.raises(ValueError, match='content'):
+        margin.validate_coverage(response, margin.positions(response))

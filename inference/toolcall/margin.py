@@ -22,6 +22,8 @@ from .tasks import load_tasks
 TASKS = Path(__file__).with_name('tasks') / 'finance_v1_wait.jsonl'
 BASELINE = RESULTS / 'toolcall-v3-wait.jsonl'
 OUTPUT = RESULTS / 'margin-q8.jsonl'
+# Qwen3 end-of-turn ids. llama-server reports them with empty text, so the id identifies them.
+END_OF_TURN = {151645: '<|im_end|>', 151643: '<|endoftext|>'}
 
 
 def auc(scores, positives):
@@ -75,6 +77,8 @@ def positions(response):
     for item in items:
         if 'top_logprobs' in item:
             result.append({k: item[k] for k in ('token', 'logprob', 'top_logprobs')})
+            if item.get('id') is not None:
+                result[-1]['id'] = item['id']
         else:
             candidates = [{'token': p['tok_str'], 'logprob': math.log(p['prob'])}
                           for p in item['probs'][:10] if p['prob'] > 0]
@@ -90,9 +94,27 @@ def positions(response):
     return result
 
 
+def mark_forced_reasoning(tokens):
+    """Flag the leading <think>...</think> block that --reasoning-budget 0 closes by force.
+
+    The server injects </think> (probe 18 Nov: logprob -24.9 against 0.0 for a newline), so these
+    positions are not decisions of the model. They stay in the file but are left out of margins.
+    """
+    if not tokens or tokens[0]['token'] != '<think>':
+        return 0
+    end = next((i for i, p in enumerate(tokens) if p['token'] == '</think>'), None)
+    if end is None:
+        raise ValueError('Reasoning block not closed')
+    for pos in tokens[:end + 1]:
+        pos['forced_reasoning'] = True
+    return end + 1
+
+
 def token_margins(tokens):
     margins = []
     for pos in tokens:
+        if pos.get('forced_reasoning'):
+            continue
         other = [p['logprob'] for p in pos['top_logprobs'] if p['token'] != pos['token']]
         if not other or not all(math.isfinite(v) for v in [pos['logprob'], *other]):
             raise ValueError('Missing alternative or nonfinite token probability')
@@ -106,13 +128,24 @@ def validate_coverage(response, tokens, raw=False):
     """Bind probabilities to reply text before parsing or persisting a turn."""
     count = response.get('tokens_predicted') if raw else response.get('usage', {}).get('completion_tokens')
     # Decode once across positions: a UTF-8 character can span token boundaries.
+    def piece(p):
+        raw_bytes = bytes(p['bytes']) if p.get('bytes') is not None else p['token'].encode('utf-8')
+        if not raw_bytes and p.get('id') in END_OF_TURN:
+            return END_OF_TURN[p['id']].encode()
+        return raw_bytes
+
     try:
-        text = b''.join(bytes(p['bytes']) if p.get('bytes') is not None
-                        else p['token'].encode('utf-8') for p in tokens).decode('utf-8')
+        text = b''.join(piece(p) for p in tokens).decode('utf-8')
     except (UnicodeError, ValueError, TypeError) as exc:
         raise ValueError('Probabilities cannot be decoded as UTF-8 reply text') from exc
-    if count != len(tokens) or not text.endswith(('<|im_end|>', '<|endoftext|>')):
-        raise ValueError('Probabilities omit generated/template/end-of-turn positions')
+    if count != len(tokens):
+        raise ValueError(f'Probabilities omit positions: server counted {count}, returned {len(tokens)}')
+    if not text.endswith(('<|im_end|>', '<|endoftext|>')):
+        raise ValueError(f'Probabilities omit end-of-turn position: text ends {text[-30:]!r}')
+    # The server returns the forced reasoning block separately from content; compare the rest.
+    skip = sum(1 for p in tokens if p.get('forced_reasoning'))
+    if skip:
+        text = re.sub(r'^<think>.*?</think>\s*', '', text, count=1, flags=re.DOTALL)
     # The server may omit a terminal marker from content. Preserve all other
     # characters, including whitespace and tool/template text, on both sides.
     def normalized(value):
@@ -126,7 +159,9 @@ def validate_coverage(response, tokens, raw=False):
         parsed = raw_message(text)
         if canonical([parsed['tool_calls']]) != canonical([message.get('tool_calls') or []]):
             raise ValueError('Chat probabilities do not cover complete tool-call text')
-        if parsed['content'] != normalized(message.get('content') or ''):
+        # The server trims whitespace around and between tool calls in message content; the
+        # whitespace tokens themselves stay covered by the token count and terminal checks.
+        if parsed['content'].strip() != normalized(message.get('content') or '').strip():
             raise ValueError('Chat probabilities do not match response content')
 
 
@@ -193,6 +228,7 @@ def generate(base, task, messages, mode):
         payload.update({'logprobs': True, 'top_logprobs': 10} if mode == 'chat' else {'n_probs': 10})
         response = request(base, '/v1/chat/completions', payload)
         tokens = positions(response)
+        mark_forced_reasoning(tokens)
         validate_coverage(response, tokens)
         message = response['choices'][0]['message']
     else:
@@ -210,6 +246,61 @@ def generate(base, task, messages, mode):
     if response.get('choices', [{}])[0].get('finish_reason') == 'length':
         raise ValueError('Chat trajectory truncated')
     return message, tokens
+
+
+def _shape(item):
+    """Keys and first candidates of one probability position, for the probe only."""
+    out = {k: v for k, v in item.items() if k not in ('top_logprobs', 'probs')}
+    for key in ('top_logprobs', 'probs'):
+        if key in item:
+            out[key] = item[key][:3]
+    return out
+
+
+def probe(base, output=RESULTS / 'margin-probe.json'):
+    """Record how this server build reports probabilities for task 0. Writes no measurement file."""
+    task = load_tasks(TASKS)[0]
+    messages, tools = task['messages'], task['tools']
+    requests = {
+        'chat': ('/v1/chat/completions', {'messages': messages, 'tools': tools, 'temperature': 0,
+                                          'seed': 0, 'logprobs': True, 'top_logprobs': 10}),
+        'native-chat': ('/v1/chat/completions', {'messages': messages, 'tools': tools,
+                                                 'temperature': 0, 'seed': 0, 'n_probs': 10}),
+    }
+    report = {}
+    for name, (endpoint, payload) in requests.items():
+        try:
+            response = request(base, endpoint, payload)
+            items = response.get('completion_probabilities')
+            if items is None:
+                items = (response['choices'][0].get('logprobs') or {}).get('content') or []
+            report[name] = {
+                'top_level_keys': sorted(response), 'usage': response.get('usage'),
+                'finish_reason': response['choices'][0].get('finish_reason'),
+                'positions': len(items), 'first': [_shape(i) for i in items[:2]],
+                'last': [_shape(i) for i in items[-3:]],
+                'message': response['choices'][0]['message']}
+        except (OSError, ValueError, KeyError, IndexError, TypeError) as exc:  # record, keep probing
+            report[name] = {'error': repr(exc)}
+    try:
+        rendered = request(base, '/apply-template', {
+            'messages': messages, 'tools': tools, 'add_generation_prompt': True,
+            'chat_template_kwargs': {'enable_thinking': False}})
+        report['template_tail'] = rendered['prompt'][-200:]
+        response = request(base, '/completion', {
+            'prompt': rendered['prompt'], 'temperature': 0, 'seed': 0, 'n_probs': 10,
+            'n_predict': 4096, 'post_sampling_probs': False, 'return_tokens': True})
+        items = response.get('completion_probabilities') or []
+        report['raw'] = {
+            'keys': sorted(response), 'tokens_predicted': response.get('tokens_predicted'),
+            'positions': len(items), 'tokens': response.get('tokens'),
+            'stop_type': response.get('stop_type'), 'stopping_word': response.get('stopping_word'),
+            'content_tail': response.get('content', '')[-200:],
+            'first': [_shape(i) for i in items[:2]], 'last': [_shape(i) for i in items[-3:]]}
+    except (OSError, ValueError, KeyError, IndexError, TypeError) as exc:
+        report['raw'] = {'error': repr(exc)}
+    output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n')
+    return report
 
 
 def measure(base, output=OUTPUT):
@@ -246,7 +337,14 @@ def measure(base, output=OUTPUT):
             calls = []
             limit = len(task['expected']) + 2 if task['category'] == 'multi_turn' else 1
             for turn in range(limit):
-                message, tokens = generate(base, task, messages, mode)
+                try:
+                    message, tokens = generate(base, task, messages, mode)
+                except (ValueError, KeyError, TypeError, OSError) as exc:
+                    # Where and why only; no probabilities, so the record reveals no margin.
+                    output.with_suffix('.error.json').write_text(json.dumps(
+                        {'task': task['id'], 'turn': turn, 'category': task['category'],
+                         'error': f'{type(exc).__name__}: {exc}'}, indent=2) + '\n')
+                    raise
                 turn_calls = message.get('tool_calls') or []
                 current[task['id']].append(turn_calls)
                 row = {'task': task['id'], 'turn': turn, 'category': task['category'], 'mode': mode,
@@ -381,8 +479,12 @@ def render_report(report):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--measure', action='store_true')
+    parser.add_argument('--probe', action='store_true', help='record server probability format only')
     parser.add_argument('--base-url', default='http://127.0.0.1:8089')
     args = parser.parse_args()
+    if args.probe:
+        probe(args.base_url)
+        return
     if args.measure:
         measure(args.base_url)
         return

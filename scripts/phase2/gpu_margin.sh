@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Owner runs on ASUS: bash scripts/phase2/gpu_margin.sh (~15 minutes GPU).
+# MARGIN_PROBE=1 bash scripts/phase2/gpu_margin.sh  -> one-minute format probe, never a measurement.
 # One run only. Aborted measurements remain .partial.jsonl, never complete.
 set -euo pipefail
 REPO="${REPO:-$HOME/projects/hybrid-ai-system}"
@@ -85,8 +86,16 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 [ "$ready" = 1 ] || { note 'FAILED: server startup'; exit 1; }
+if [ "${MARGIN_PROBE:-0}" = 1 ]; then
+  note 'Probe: recording server probability format for task 0 (no measurement file)'
+  rc=0
+  uv run python -m inference.toolcall.margin --probe --base-url "http://127.0.0.1:$PORT" || rc=$?
+  note "Probe finished with exit $rc; see margin-probe.json"
+  exit "$rc"
+fi
 note 'Starting preflight and fixed Q8 replay'
-uv run python -m inference.toolcall.margin --measure --base-url "http://127.0.0.1:$PORT" &
+uv run python -m inference.toolcall.margin --measure --base-url "http://127.0.0.1:$PORT" \
+  2>> "$OUT/margin-measure.log" &
 EVALUATOR=$!
 rc=0
 wait "$EVALUATOR" || rc=$?

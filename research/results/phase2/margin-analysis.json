@@ -1,0 +1,106 @@
+{
+  "primary": {
+    "n": 95,
+    "positives": 11,
+    "auc": 0.5995670995670995,
+    "p_value": 0.15408459154084592,
+    "decision": "not supported",
+    "permutations": 10000,
+    "seed": 0
+  },
+  "mismatch_share": 0.0,
+  "secondary": {
+    "q4": {
+      "n": 95,
+      "positives": 4,
+      "auc": 0.5879120879120879,
+      "p_value": 0.28987101289871015,
+      "decision": "not informative",
+      "permutations": 10000,
+      "seed": 0
+    },
+    "first_position": {
+      "n": 95,
+      "positives": 11,
+      "auc": 0.45346320346320346,
+      "p_value": 0.692030796920308,
+      "decision": "not supported",
+      "permutations": 10000,
+      "seed": 0
+    },
+    "mean_margin": {
+      "n": 95,
+      "positives": 11,
+      "auc": 0.6233766233766234,
+      "p_value": 0.09729027097290271,
+      "decision": "not supported",
+      "permutations": 10000,
+      "seed": 0
+    },
+    "by_category": {
+      "abstain": {
+        "n": 12,
+        "positives": 0,
+        "auc": null,
+        "p_value": null,
+        "decision": "not informative",
+        "permutations": 10000,
+        "seed": 0
+      },
+      "clarify": {
+        "n": 9,
+        "positives": 5,
+        "auc": 0.4,
+        "p_value": 0.7244275572442755,
+        "decision": "not informative",
+        "permutations": 10000,
+        "seed": 0
+      },
+      "multi_turn": {
+        "n": 33,
+        "positives": 3,
+        "auc": 0.5222222222222223,
+        "p_value": 0.46295370462953706,
+        "decision": "not informative",
+        "permutations": 10000,
+        "seed": 0
+      },
+      "parallel": {
+        "n": 11,
+        "positives": 3,
+        "auc": 0.6666666666666666,
+        "p_value": 0.24317568243175683,
+        "decision": "not informative",
+        "permutations": 10000,
+        "seed": 0
+      },
+      "single": {
+        "n": 30,
+        "positives": 0,
+        "auc": null,
+        "p_value": null,
+        "decision": "not informative",
+        "permutations": 10000,
+        "seed": 0
+      }
+    },
+    "lowest_quarter": {
+      "tasks": 24,
+      "cutoff": 0.19323354959487915,
+      "captured_failures": 3,
+      "share": 0.2727272727272727,
+      "ties": "fractional inclusion at boundary; quarter size rounded up"
+    },
+    "q8_confidence": {
+      "n": 114,
+      "positives": 19,
+      "auc": 0.621606648199446,
+      "p_value": 0.04459554044595541,
+      "decision": "supported",
+      "permutations": 10000,
+      "seed": 0,
+      "mean_min_margin_success": 5.146694341398692,
+      "mean_min_margin_failure": 1.4449856091033373
+    }
+  }
+}

@@ -1,0 +1,10 @@
+- 2026-11-17T05:56:13Z Starting preflight and fixed Q8 replay
+- 2026-11-17T05:56:23Z FAILED: measurement exit 1; inspect preflight/partial files
+- 2026-11-17T18:55:08Z Starting preflight and fixed Q8 replay
+- 2026-11-17T18:55:19Z FAILED: measurement exit 1; inspect preflight/partial files
+- 2026-11-17T19:52:08Z Probe: recording server probability format for task 0 (no measurement file)
+- 2026-11-17T19:52:19Z Probe finished with exit 0; see margin-probe.json
+- 2026-11-17T20:14:22Z Starting preflight and fixed Q8 replay
+- 2026-11-17T20:16:29Z FAILED: measurement exit 1; inspect preflight/partial files
+- 2026-11-18T07:54:28Z Starting preflight and fixed Q8 replay
+- 2026-11-18T08:06:23Z Complete: validated measurement and pre-registered analysis; no automatic commit/push
